@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>グラフ作成ツール</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --accent: #2563eb;
+      --accent-light: #eff6ff;
+      --border: #d1d5db;
+      --text: #1f2937;
+      --text-muted: #6b7280;
+      --bg: #f3f4f6;
+      --card: #ffffff;
+      --radius: 10px;
+      --sidebar: 300px;
+    }
+
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; font-size: 14px; }
+
+    /* ── Header ── */
+    header {
+      background: var(--accent);
+      color: #fff;
+      padding: 13px 20px;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: .02em;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 8px rgba(0,0,0,.15);
+    }
+
+    /* ── Layout ── */
+    .app-body {
+      display: flex;
+      gap: 0;
+      height: calc(100vh - 46px);
+      overflow: hidden;
+    }
+
+    .sidebar {
+      width: var(--sidebar);
+      flex-shrink: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      background: var(--card);
+      border-right: 1px solid var(--border);
+      padding: 14px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .main-area {
+      flex: 1;
+      overflow: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 14px;
+    }
+
+    /* ── Section ── */
+    .section {
+      background: var(--card);
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+
+    .section-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      color: var(--accent);
+      background: var(--accent-light);
+      padding: 6px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .section-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+
+    /* ── Form controls ── */
+    label { display: block; font-size: 11px; font-weight: 600; color: var(--text-muted); margin-bottom: 3px; }
+
+    select, input[type="text"], input[type="number"] {
+      width: 100%;
+      padding: 6px 8px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 13px;
+      color: var(--text);
+      background: #fff;
+      outline: none;
+      transition: border-color .15s;
+      -webkit-appearance: none;
+    }
+    select:focus, input:focus { border-color: var(--accent); }
+
+    .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+
+    /* ── Toggle ── */
+    .toggle-group {
+      display: flex;
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      overflow: hidden;
+    }
+    .toggle-btn {
+      flex: 1;
+      padding: 7px;
+      text-align: center;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      background: #fff;
+      color: var(--text-muted);
+      border: none;
+      transition: background .15s, color .15s;
+    }
+    .toggle-btn.active { background: var(--accent); color: #fff; }
+
+    /* ── File drop zone ── */
+    .drop-zone {
+      border: 2px dashed #93c5fd;
+      border-radius: 8px;
+      padding: 16px;
+      text-align: center;
+      cursor: pointer;
+      background: var(--accent-light);
+      transition: border-color .15s;
+    }
+    .drop-zone.over { border-color: var(--accent); }
+    .drop-zone input { display: none; }
+    .drop-zone .dz-icon { font-size: 22px; margin-bottom: 4px; }
+    .drop-zone p { font-size: 11px; color: var(--text-muted); }
+    .file-name { font-size: 11px; color: var(--accent); margin-top: 4px; word-break: break-all; }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      padding: 7px 12px;
+      border: none;
+      border-radius: 7px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: filter .15s, opacity .15s;
+      white-space: nowrap;
+    }
+    .btn:hover { filter: brightness(.92); }
+    .btn:active { filter: brightness(.85); }
+    .btn-primary { background: var(--accent); color: #fff; width: 100%; }
+    .btn-danger  { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; padding: 4px 7px; font-size: 11px; }
+    .btn-outline { background: #fff; color: var(--text); border: 1px solid var(--border); }
+    .btn-export  { background: #fff; color: var(--text); border: 1px solid var(--border); flex: 1; padding: 9px 4px; font-size: 12px; }
+    .btn-export:hover { background: var(--accent-light); border-color: var(--accent); color: var(--accent); }
+
+    /* ── Series card ── */
+    .series-card {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .series-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 8px;
+      background: #f9fafb;
+      border-bottom: 1px solid var(--border);
+    }
+    .series-header input[type="color"] {
+      width: 28px; height: 28px;
+      padding: 1px;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      cursor: pointer;
+      background: none;
+    }
+    .series-header input[type="text"] { flex: 1; padding: 5px 7px; font-size: 12px; }
+
+    .series-body { padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+
+    .pair-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr auto;
+      gap: 4px;
+      align-items: end;
+    }
+    .pair-row .pair-field label { font-size: 10px; }
+    .pair-row .pair-field select { font-size: 12px; padding: 5px 6px; }
+    .pair-del { align-self: end; margin-bottom: 0; }
+
+    /* ── Canvas area ── */
+    .canvas-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px;
+      display: inline-flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .canvas-wrapper {
+      overflow: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    canvas {
+      display: block;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+    }
+    .export-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    /* ── Error ── */
+    .error-bar {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #dc2626;
+      border-radius: 7px;
+      padding: 8px 12px;
+      font-size: 12px;
+      display: none;
+    }
+    .error-bar.show { display: block; }
+
+    /* ── Util ── */
+    .hidden { display: none !important; }
+
+    /* ── Mobile ── */
+    @media (max-width: 768px) {
+      .app-body { flex-direction: column; height: auto; overflow: visible; }
+      .sidebar { width: 100%; max-height: none; border-right: none; border-bottom: 1px solid var(--border); }
+      .main-area { padding: 12px; align-items: stretch; }
+      .canvas-card { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+
+<header>📊 グラフ作成ツール</header>
+
+<div class="app-body">
+
+  <!-- ══════════ SIDEBAR ══════════ -->
+  <aside class="sidebar">
+
+    <!-- ① データ -->
+    <div class="section">
+      <div class="section-title">① データ</div>
+      <div class="section-body">
+
+        <div class="toggle-group">
+          <button class="toggle-btn active" id="btn-excel" onclick="switchFileType('excel')">Excel</button>
+          <button class="toggle-btn" id="btn-csv" onclick="switchFileType('csv')">CSV</button>
+        </div>
+
+        <div class="drop-zone" id="drop-zone">
+          <div class="dz-icon">📂</div>
+          <p>クリックまたはドラッグ&ドロップ</p>
+          <p id="dz-hint">.xlsx / .xls</p>
+          <input type="file" id="file-input" accept=".xlsx,.xls">
+          <div class="file-name" id="file-name"></div>
+        </div>
+
+        <!-- Excel extras -->
+        <div id="excel-extras">
+          <div id="sheet-field" class="hidden">
+            <label>シート</label>
+            <select id="sheet-sel" onchange="onSheetChange()"></select>
+          </div>
+          <div>
+            <label>ヘッダー行番号</label>
+            <input type="number" id="header-row" value="1" min="1" onchange="reparseExcel()">
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ② データ系列 -->
+    <div class="section">
+      <div class="section-title">② データ系列</div>
+      <div class="section-body">
+        <div id="series-list"></div>
+        <button class="btn btn-primary" onclick="addSeries()">＋ 系列を追加</button>
+      </div>
+    </div>
+
+    <!-- ③ 軸ラベル -->
+    <div class="section">
+      <div class="section-title">③ 軸ラベル</div>
+      <div class="section-body">
+        <div>
+          <label>X 軸ラベル</label>
+          <input type="text" id="x-label" placeholder="未入力で非表示" oninput="drawChart()">
+        </div>
+        <div>
+          <label>Y 軸ラベル</label>
+          <input type="text" id="y-label" placeholder="未入力で非表示" oninput="drawChart()">
+        </div>
+      </div>
+    </div>
+
+    <!-- ④ 凡例 -->
+    <div class="section">
+      <div class="section-title">④ 凡例</div>
+      <div class="section-body">
+        <div>
+          <label>表示位置</label>
+          <select id="legend-pos" onchange="drawChart()">
+            <option value="upper right">右上（デフォルト）</option>
+            <option value="upper left">左上</option>
+            <option value="lower right">右下</option>
+            <option value="lower left">左下</option>
+            <option value="hidden">非表示</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- ⑤ 近似曲線 -->
+    <div class="section">
+      <div class="section-title">⑤ 近似曲線</div>
+      <div class="section-body">
+        <div>
+          <label>種類</label>
+          <select id="trendline" onchange="onTrendlineChange()">
+            <option value="none">なし</option>
+            <option value="linear">直線（線形）</option>
+            <option value="exponential">指数</option>
+            <option value="power">べき乗</option>
+            <option value="moving_average">移動平均</option>
+          </select>
+        </div>
+        <div id="ma-field" class="hidden">
+          <label>区間数（最小2）</label>
+          <input type="number" id="ma-window" value="3" min="2" max="99" onchange="drawChart()">
+        </div>
+      </div>
+    </div>
+
+    <!-- ⑥ エクスポート -->
+    <div class="section">
+      <div class="section-title">⑥ エクスポート</div>
+      <div class="section-body">
+        <div class="export-row">
+          <button class="btn btn-export" onclick="exportChart('png')">PNG</button>
+          <button class="btn btn-export" onclick="exportChart('jpeg')">JPEG</button>
+          <button class="btn btn-export" onclick="exportChart('svg')">SVG</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="error-bar" id="error-bar"></div>
+
+  </aside>
+
+  <!-- ══════════ MAIN ══════════ -->
+  <main class="main-area">
+    <div class="canvas-card">
+      <div class="canvas-wrapper">
+        <canvas id="chart" width="680" height="480"></canvas>
+      </div>
+    </div>
+  </main>
+
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+// CONSTANTS
+// ─────────────────────────────────────────────
+const CW = 680, CH = 480;
+const PAD = { top: 30, right: 30, bottom: 70, left: 70 };
+const PW = CW - PAD.left - PAD.right;   // 580
+const PH = CH - PAD.top  - PAD.bottom;  // 380
+
+const DEFAULT_COLORS = [
+  '#2563eb','#e11d48','#16a34a','#d97706',
+  '#7c3aed','#0891b2','#be185d','#15803d'
+];
+
+// ─────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────
+const state = {
+  fileType: 'excel',
+  columns: [],
+  sheets: [],
+  activeSheetIdx: 0,
+  headerRow: 1,
+  rawData: {},        // { colName: [values] }
+  workbook: null,
+  series: [],
+  seriesCounter: 0,
+};
+
+// ─────────────────────────────────────────────
+// FILE TYPE TOGGLE
+// ─────────────────────────────────────────────
+function switchFileType(type) {
+  state.fileType = type;
+  document.getElementById('btn-excel').classList.toggle('active', type === 'excel');
+  document.getElementById('btn-csv').classList.toggle('active', type === 'csv');
+  document.getElementById('dz-hint').textContent = type === 'excel' ? '.xlsx / .xls' : '.csv';
+  document.getElementById('file-input').accept = type === 'excel' ? '.xlsx,.xls' : '.csv';
+  document.getElementById('excel-extras').style.display = type === 'excel' ? '' : 'none';
+  resetData();
+}
+
+function resetData() {
+  state.columns = [];
+  state.rawData = {};
+  state.workbook = null;
+  state.sheets = [];
+  document.getElementById('file-name').textContent = '';
+  document.getElementById('sheet-field').classList.add('hidden');
+  renderSeriesList();
+  drawChart();
+}
+
+// ─────────────────────────────────────────────
+// FILE UPLOAD
+// ─────────────────────────────────────────────
+(function initDrop() {
+  const zone = document.getElementById('drop-zone');
+  const inp  = document.getElementById('file-input');
+
+  zone.addEventListener('click', () => inp.click());
+  inp.addEventListener('change', () => inp.files[0] && handleFile(inp.files[0]));
+
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('over'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('over');
+    if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+  });
+})();
+
+function handleFile(file) {
+  clearError();
+  document.getElementById('file-name').textContent = file.name;
+  if (state.fileType === 'excel') loadExcel(file);
+  else loadCSV(file);
+}
+
+// ─────────────────────────────────────────────
+// EXCEL
+// ─────────────────────────────────────────────
+function loadExcel(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      state.workbook = XLSX.read(e.target.result, { type: 'array' });
+      state.sheets = state.workbook.SheetNames;
+      state.activeSheetIdx = 0;
+
+      const sheetSel = document.getElementById('sheet-sel');
+      sheetSel.innerHTML = state.sheets.map((s, i) =>
+        `<option value="${i}">${s}</option>`
+      ).join('');
+
+      document.getElementById('sheet-field').classList.toggle('hidden', state.sheets.length <= 1);
+      parseExcelSheet();
+    } catch(err) { showError('Excelの読み込みに失敗しました: ' + err.message); }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function onSheetChange() {
+  state.activeSheetIdx = parseInt(document.getElementById('sheet-sel').value);
+  parseExcelSheet();
+}
+
+function reparseExcel() {
+  state.headerRow = parseInt(document.getElementById('header-row').value) || 1;
+  if (state.workbook) parseExcelSheet();
+}
+
+function parseExcelSheet() {
+  state.headerRow = parseInt(document.getElementById('header-row').value) || 1;
+  const sheetName = state.sheets[state.activeSheetIdx];
+  const ws = state.workbook.Sheets[sheetName];
+  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+
+  const hIdx = state.headerRow - 1;
+  if (hIdx >= rows.length) { showError('ヘッダー行番号が範囲外です'); return; }
+
+  const headers = rows[hIdx];
+  const colNames = headers.map((h, i) =>
+    (h === null || h === undefined || String(h).trim() === '') ? colLetter(i) : String(h)
+  );
+
+  state.rawData = {};
+  colNames.forEach(n => { state.rawData[n] = []; });
+
+  for (let r = hIdx + 1; r < rows.length; r++) {
+    const row = rows[r];
+    colNames.forEach((n, ci) => state.rawData[n].push(row[ci] ?? null));
+  }
+
+  state.columns = colNames;
+  onColumnsLoaded();
+}
+
+function colLetter(idx) {
+  let r = '', n = idx + 1;
+  while (n > 0) { n--; r = String.fromCharCode(65 + n % 26) + r; n = Math.floor(n / 26); }
+  return '列' + r;
+}
+
+// ─────────────────────────────────────────────
+// CSV
+// ─────────────────────────────────────────────
+function loadCSV(file) {
+  Papa.parse(file, {
+    header: true,
+    dynamicTyping: true,
+    skipEmptyLines: true,
+    complete: result => {
+      state.columns = result.meta.fields || [];
+      state.rawData = {};
+      state.columns.forEach(col => {
+        state.rawData[col] = result.data.map(row => row[col]);
+      });
+      onColumnsLoaded();
+    },
+    error: err => showError('CSVパースエラー: ' + err.message)
+  });
+}
+
+// ─────────────────────────────────────────────
+// ON COLUMNS LOADED
+// ─────────────────────────────────────────────
+function onColumnsLoaded() {
+  renderSeriesList();
+  drawChart();
+}
+
+// ─────────────────────────────────────────────
+// SERIES MANAGEMENT
+// ─────────────────────────────────────────────
+function addSeries() {
+  const idx = state.series.length;
+  state.series.push({
+    id: ++state.seriesCounter,
+    name: `系列 ${idx + 1}`,
+    color: DEFAULT_COLORS[idx % DEFAULT_COLORS.length],
+    pairs: [{ xCol: '', yCol: '' }]
+  });
+  renderSeriesList();
+  drawChart();
+}
+
+function removeSeries(id) {
+  state.series = state.series.filter(s => s.id !== id);
+  renderSeriesList();
+  drawChart();
+}
+
+function updateSeriesName(id, val) {
+  getSeries(id).name = val;
+  drawChart();
+}
+
+function updateSeriesColor(id, val) {
+  getSeries(id).color = val;
+  drawChart();
+}
+
+function addPair(id) {
+  getSeries(id).pairs.push({ xCol: '', yCol: '' });
+  renderSeriesList();
+  drawChart();
+}
+
+function removePair(id, pi) {
+  const s = getSeries(id);
+  s.pairs.splice(pi, 1);
+  renderSeriesList();
+  drawChart();
+}
+
+function updatePair(id, pi, field, val) {
+  getSeries(id).pairs[pi][field] = val;
+  drawChart();
+}
+
+function getSeries(id) { return state.series.find(s => s.id === id); }
+
+// ─────────────────────────────────────────────
+// RENDER SERIES LIST
+// ─────────────────────────────────────────────
+function renderSeriesList() {
+  const container = document.getElementById('series-list');
+  container.innerHTML = '';
+
+  state.series.forEach(s => {
+    const card = document.createElement('div');
+    card.className = 'series-card';
+    card.style.marginBottom = '8px';
+
+    // Header
+    const hdr = document.createElement('div');
+    hdr.className = 'series-header';
+    hdr.innerHTML = `
+      <input type="color" value="${s.color}"
+        onchange="updateSeriesColor(${s.id}, this.value)">
+      <input type="text" value="${escHtml(s.name)}"
+        oninput="updateSeriesName(${s.id}, this.value)">
+      <button class="btn btn-danger" onclick="removeSeries(${s.id})">✕</button>
+    `;
+    card.appendChild(hdr);
+
+    // Body
+    const body = document.createElement('div');
+    body.className = 'series-body';
+
+    s.pairs.forEach((pair, pi) => {
+      const row = document.createElement('div');
+      row.className = 'pair-row';
+
+      const xField = makePairField('X', s, pair, pi, 'xCol');
+      const yField = makePairField('Y', s, pair, pi, 'yCol');
+
+      row.appendChild(xField);
+      row.appendChild(yField);
+
+      if (s.pairs.length > 1) {
+        const del = document.createElement('button');
+        del.className = 'btn btn-danger pair-del';
+        del.textContent = '✕';
+        del.onclick = () => removePair(s.id, pi);
+        row.appendChild(del);
+      }
+
+      body.appendChild(row);
+    });
+
+    const addPairBtn = document.createElement('button');
+    addPairBtn.className = 'btn btn-outline';
+    addPairBtn.style.cssText = 'font-size:11px;padding:5px 8px;width:100%;margin-top:4px';
+    addPairBtn.textContent = '＋ データを追加';
+    addPairBtn.onclick = () => addPair(s.id);
+    body.appendChild(addPairBtn);
+
+    card.appendChild(body);
+    container.appendChild(card);
+  });
+}
+
+function makePairField(label, s, pair, pi, field) {
+  const wrap = document.createElement('div');
+  wrap.className = 'pair-field';
+  const lbl = document.createElement('label');
+  lbl.textContent = label + ' 軸';
+  const sel = document.createElement('select');
+  sel.innerHTML = `<option value="">—</option>` +
+    state.columns.map(c =>
+      `<option value="${escHtml(c)}" ${c === pair[field] ? 'selected' : ''}>${escHtml(c)}</option>`
+    ).join('');
+  sel.onchange = () => updatePair(s.id, pi, field, sel.value);
+  wrap.appendChild(lbl);
+  wrap.appendChild(sel);
+  return wrap;
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ─────────────────────────────────────────────
+// TRENDLINE TOGGLE
+// ─────────────────────────────────────────────
+function onTrendlineChange() {
+  const v = document.getElementById('trendline').value;
+  document.getElementById('ma-field').classList.toggle('hidden', v !== 'moving_average');
+  drawChart();
+}
+
+// ─────────────────────────────────────────────
+// DATA HELPERS
+// ─────────────────────────────────────────────
+function getSeriesPoints(s) {
+  const pts = [];
+  for (const pair of s.pairs) {
+    if (!pair.xCol || !pair.yCol) continue;
+    const xs = state.rawData[pair.xCol] || [];
+    const ys = state.rawData[pair.yCol] || [];
+    const n = Math.min(xs.length, ys.length);
+    for (let i = 0; i < n; i++) {
+      const x = parseFloat(xs[i]);
+      const y = parseFloat(ys[i]);
+      if (isFinite(x) && isFinite(y)) pts.push({ x, y });
+    }
+  }
+  return pts;
+}
+
+// ─────────────────────────────────────────────
+// REGRESSION
+// ─────────────────────────────────────────────
+function linReg(pts) {
+  const n = pts.length;
+  if (n < 2) return null;
+  let sx=0, sy=0, sxy=0, sx2=0;
+  for (const {x,y} of pts) { sx+=x; sy+=y; sxy+=x*y; sx2+=x*x; }
+  const d = n*sx2 - sx*sx;
+  if (Math.abs(d) < 1e-14) return null;
+  const m = (n*sxy - sx*sy) / d;
+  const b = (sy - m*sx) / n;
+  return x => m*x + b;
+}
+
+function expReg(pts) {
+  const valid = pts.filter(p => p.y > 0);
+  if (valid.length < 2) return null;
+  const fn = linReg(valid.map(p => ({x: p.x, y: Math.log(p.y)})));
+  return fn ? x => Math.exp(fn(x)) : null;
+}
+
+function powReg(pts) {
+  const valid = pts.filter(p => p.x > 0 && p.y > 0);
+  if (valid.length < 2) return null;
+  const fn = linReg(valid.map(p => ({x: Math.log(p.x), y: Math.log(p.y)})));
+  return fn ? x => (x > 0 ? Math.exp(fn(Math.log(x))) : NaN) : null;
+}
+
+function movingAvg(pts, w) {
+  if (pts.length < w) return [];
+  const sorted = [...pts].sort((a,b) => a.x - b.x);
+  const result = [];
+  for (let i = w-1; i < sorted.length; i++) {
+    const sl = sorted.slice(i-w+1, i+1);
+    result.push({
+      x: sl.reduce((s,p)=>s+p.x,0)/w,
+      y: sl.reduce((s,p)=>s+p.y,0)/w
+    });
+  }
+  return result;
+}
+
+// ─────────────────────────────────────────────
+// AXIS HELPERS
+// ─────────────────────────────────────────────
+function niceTicks(min, max, target=5) {
+  if (!isFinite(min) || !isFinite(max)) return [0,1];
+  if (min === max) {
+    const step = Math.abs(min) * 0.1 || 1;
+    return [min - step, min, min + step];
+  }
+  const range = max - min;
+  const rough = range / target;
+  const mag = Math.pow(10, Math.floor(Math.log10(rough)));
+  const norm = rough / mag;
+  const nice = norm < 1.5 ? 1 : norm < 3.5 ? 2 : norm < 7.5 ? 5 : 10;
+  const step = nice * mag;
+  const start = Math.ceil(min / step - 1e-9) * step;
+  const ticks = [];
+  for (let t = start; t <= max + step*0.001; t += step) {
+    const v = parseFloat(t.toPrecision(10));
+    ticks.push(Math.abs(v) < step * 1e-9 ? 0 : v);
+  }
+  return ticks;
+}
+
+function fmtTick(v) {
+  if (v === 0) return '0';
+  const abs = Math.abs(v);
+  if (abs >= 10000 || (abs < 0.01 && abs > 0)) {
+    const e = Math.floor(Math.log10(abs));
+    const m = v / Math.pow(10, e);
+    return `${m.toFixed(1)}e${e >= 0 ? '+' : ''}${e}`;
+  }
+  return parseFloat(v.toPrecision(4)).toString();
+}
+
+function computeRange(allPts) {
+  let xMin=Infinity, xMax=-Infinity, yMin=Infinity, yMax=-Infinity;
+  for (const {x,y} of allPts) {
+    if (x < xMin) xMin=x; if (x > xMax) xMax=x;
+    if (y < yMin) yMin=y; if (y > yMax) yMax=y;
+  }
+  if (!isFinite(xMin)) { xMin=0; xMax=1; yMin=0; yMax=1; }
+  const xR = xMax-xMin || 1, yR = yMax-yMin || 1;
+  return {
+    xMin: xMin - xR*0.07, xMax: xMax + xR*0.07,
+    yMin: yMin - yR*0.07, yMax: yMax + yR*0.07,
+  };
+}
+
+function cx(xv, range) { return PAD.left + (xv - range.xMin) / (range.xMax - range.xMin) * PW; }
+function cy(yv, range) { return PAD.top  + (1 - (yv - range.yMin) / (range.yMax - range.yMin)) * PH; }
+
+// ─────────────────────────────────────────────
+// DRAW CHART
+// ─────────────────────────────────────────────
+function drawChart() {
+  const canvas = document.getElementById('chart');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, CW, CH);
+
+  // Collect data
+  const seriesData = state.series.map(s => ({
+    name: s.name,
+    color: s.color,
+    points: getSeriesPoints(s),
+  })).filter(s => s.points.length > 0);
+
+  const allPts = seriesData.flatMap(s => s.points);
+  const range = computeRange(allPts);
+  const xTicks = niceTicks(range.xMin, range.xMax);
+  const yTicks = niceTicks(range.yMin, range.yMax);
+
+  // ── Frame (4 sides, black) ──
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(PAD.left, PAD.top, PW, PH);
+
+  // ── X ticks (bottom, inward = upward) ──
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (const t of xTicks) {
+    const px = cx(t, range);
+    if (px < PAD.left - 0.5 || px > PAD.left + PW + 0.5) continue;
+    ctx.moveTo(px, PAD.top + PH);
+    ctx.lineTo(px, PAD.top + PH - 6);
+  }
+  ctx.stroke();
+
+  // ── Y ticks (left, inward = rightward) ──
+  ctx.beginPath();
+  for (const t of yTicks) {
+    const py = cy(t, range);
+    if (py < PAD.top - 0.5 || py > PAD.top + PH + 0.5) continue;
+    ctx.moveTo(PAD.left, py);
+    ctx.lineTo(PAD.left + 6, py);
+  }
+  ctx.stroke();
+
+  // ── Tick labels ──
+  ctx.fillStyle = '#444';
+  ctx.font = '11px sans-serif';
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  for (const t of xTicks) {
+    const px = cx(t, range);
+    if (px < PAD.left - 20 || px > PAD.left + PW + 20) continue;
+    ctx.fillText(fmtTick(t), px, PAD.top + PH + 8);
+  }
+
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  for (const t of yTicks) {
+    const py = cy(t, range);
+    if (py < PAD.top - 20 || py > PAD.top + PH + 20) continue;
+    ctx.fillText(fmtTick(t), PAD.left - 8, py);
+  }
+
+  // ── Axis labels ──
+  const xLabel = document.getElementById('x-label').value.trim();
+  const yLabel = document.getElementById('y-label').value.trim();
+
+  if (xLabel) {
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.font = '13px sans-serif';
+    ctx.fillStyle = '#222';
+    ctx.fillText(xLabel, PAD.left + PW / 2, CH - 4);
+  }
+
+  if (yLabel) {
+    ctx.save();
+    ctx.translate(13, PAD.top + PH / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.font = '13px sans-serif';
+    ctx.fillStyle = '#222';
+    ctx.fillText(yLabel, 0, 0);
+    ctx.restore();
+  }
+
+  if (seriesData.length === 0) return;
+
+  // ── Trendlines ──
+  const trendType = document.getElementById('trendline').value;
+  const maW = Math.max(2, parseInt(document.getElementById('ma-window').value) || 3);
+
+  if (trendType !== 'none') {
+    for (const s of seriesData) {
+      drawTrendline(ctx, s, range, trendType, maW);
+    }
+  }
+
+  // ── Data points ──
+  for (const s of seriesData) {
+    ctx.fillStyle = s.color;
+    for (const {x, y} of s.points) {
+      const px = cx(x, range), py = cy(y, range);
+      ctx.beginPath();
+      ctx.arc(px, py, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // ── Legend ──
+  const legendPos = document.getElementById('legend-pos').value;
+  if (legendPos !== 'hidden') drawLegend(ctx, seriesData, legendPos);
+}
+
+function drawTrendline(ctx, s, range, type, maW) {
+  const pts = s.points;
+  ctx.strokeStyle = s.color;
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([6, 3]);
+
+  if (type === 'moving_average') {
+    const maPts = movingAvg(pts, maW);
+    if (maPts.length < 2) { ctx.setLineDash([]); return; }
+    ctx.beginPath();
+    maPts.forEach(({x,y}, i) => {
+      const px = cx(x, range), py = cy(y, range);
+      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    });
+    ctx.stroke();
+    ctx.setLineDash([]);
+    return;
+  }
+
+  let fn;
+  if (type === 'linear')      fn = linReg(pts);
+  else if (type === 'exponential') fn = expReg(pts);
+  else if (type === 'power')  fn = powReg(pts);
+
+  if (!fn) { ctx.setLineDash([]); return; }
+
+  const steps = 300;
+  ctx.beginPath();
+  let started = false;
+  for (let i = 0; i <= steps; i++) {
+    const xv = range.xMin + (range.xMax - range.xMin) * i / steps;
+    const yv = fn(xv);
+    if (!isFinite(yv)) { started = false; continue; }
+    const px = cx(xv, range), py = cy(yv, range);
+    started ? ctx.lineTo(px, py) : (ctx.moveTo(px, py), started = true);
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function drawLegend(ctx, seriesData, pos) {
+  const SWATCH = 14, GAP = 6, LH = 20, IPAD = 10;
+  ctx.font = '11px sans-serif';
+  const maxW = Math.max(...seriesData.map(s => ctx.measureText(s.name).width));
+  const bw = IPAD*2 + SWATCH + GAP + maxW;
+  const bh = IPAD*2 + LH * seriesData.length;
+  const M = 10;
+
+  let lx, ly;
+  switch(pos) {
+    case 'upper left':  lx = PAD.left + M;      ly = PAD.top + M; break;
+    case 'lower right': lx = PAD.left+PW-M-bw;  ly = PAD.top+PH-M-bh; break;
+    case 'lower left':  lx = PAD.left + M;      ly = PAD.top+PH-M-bh; break;
+    default:            lx = PAD.left+PW-M-bw;  ly = PAD.top + M;
+  }
+
+  ctx.fillStyle = 'rgba(255,255,255,0.88)';
+  ctx.strokeStyle = '#ccc';
+  ctx.lineWidth = 0.7;
+  ctx.beginPath();
+  ctx.rect(lx, ly, bw, bh);
+  ctx.fill();
+  ctx.stroke();
+
+  seriesData.forEach((s, i) => {
+    const iy = ly + IPAD + i*LH + LH/2;
+    ctx.fillStyle = s.color;
+    ctx.fillRect(lx + IPAD, iy - SWATCH/2, SWATCH, SWATCH);
+    ctx.fillStyle = '#333';
+    ctx.font = '11px sans-serif';
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'left';
+    ctx.fillText(s.name, lx + IPAD + SWATCH + GAP, iy);
+  });
+}
+
+// ─────────────────────────────────────────────
+// EXPORT
+// ─────────────────────────────────────────────
+function exportChart(fmt) {
+  const canvas = document.getElementById('chart');
+
+  if (fmt === 'png') {
+    dl(canvas.toDataURL('image/png'), 'chart.png');
+  } else if (fmt === 'jpeg') {
+    const tmp = document.createElement('canvas');
+    tmp.width = canvas.width; tmp.height = canvas.height;
+    const tc = tmp.getContext('2d');
+    tc.fillStyle = '#fff';
+    tc.fillRect(0, 0, tmp.width, tmp.height);
+    tc.drawImage(canvas, 0, 0);
+    dl(tmp.toDataURL('image/jpeg', 0.95), 'chart.jpeg');
+  } else if (fmt === 'svg') {
+    const png = canvas.toDataURL('image/png');
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${CW}" height="${CH}">
+  <image href="${png}" width="${CW}" height="${CH}"/>
+</svg>`;
+    dl('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg), 'chart.svg');
+  }
+}
+
+function dl(dataUrl, name) {
+  const a = document.createElement('a');
+  a.href = dataUrl; a.download = name; a.click();
+}
+
+// ─────────────────────────────────────────────
+// ERROR
+// ─────────────────────────────────────────────
+function showError(msg) {
+  const el = document.getElementById('error-bar');
+  el.textContent = msg;
+  el.classList.add('show');
+}
+function clearError() {
+  document.getElementById('error-bar').classList.remove('show');
+}
+
+// ─────────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────────
+drawChart();
+</script>
+</body>
+</html>
