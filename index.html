@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>グラフ作成ツール</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -245,10 +245,47 @@
 
     /* ── Mobile ── */
     @media (max-width: 768px) {
-      .app-body { flex-direction: column; height: auto; overflow: visible; }
-      .sidebar { width: 100%; max-height: none; border-right: none; border-bottom: 1px solid var(--border); }
-      .main-area { padding: 12px; align-items: stretch; }
-      .canvas-card { width: 100%; }
+      html, body { height: auto; overflow-y: auto; }
+
+      .app-body {
+        flex-direction: column;
+        height: auto;
+        overflow: visible;
+      }
+
+      .sidebar {
+        width: 100%;
+        overflow-y: visible;
+        overflow-x: hidden;
+        max-height: none;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+        /* 2カラムグリッドで並べる */
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        padding: 12px;
+      }
+
+      /* ① データ と ② データ系列 は全幅 */
+      .sidebar > .section:nth-child(1),
+      .sidebar > .section:nth-child(2) {
+        grid-column: 1 / -1;
+      }
+
+      .main-area {
+        padding: 12px;
+        align-items: stretch;
+      }
+
+      .canvas-card {
+        width: 100%;
+      }
+
+      .canvas-wrapper {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
     }
   </style>
 </head>
